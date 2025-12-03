@@ -42,42 +42,40 @@ fn find_highest_two_batteries_in_row(row: &Vec<u32>) -> u32 {
 fn find_highest_twelve_batteries_in_row(row: &Vec<u32>) -> u64 {
     let batteries = 12;
 
-    let mut highest_digits = Vec::from(&row[(row.len() - batteries)..]);
+    let mut highest_digits = vec![vec![0; row.len()]; batteries];
 
-    for i in (0..=(row.len() - batteries - 1)).rev() {
-        let current_digit = row[i];
-        let leading_highest_digit = highest_digits[0];
+    highest_digits[0][row.len() - 1] = u64::from(row[row.len() - 1]);
 
-        if current_digit < leading_highest_digit {
-            continue;
-        }
-
-        let mut lowest_digit_index = 0;
-        for index in 1..highest_digits.len() {
-            if highest_digits[index] < highest_digits[lowest_digit_index] {
-                lowest_digit_index = index;
-            }
-        }
-
-        let digit_to_drop = highest_digits[lowest_digit_index];
-        if digit_to_drop == current_digit {
-            // NOTE: dropping and inserting the same digit will not change the value.
-            // This is a special case when all 12 digits are the same.
-            // Not having this `continue` shouldn't change the result, though.
-            continue;
-        }
-
-        highest_digits.remove(lowest_digit_index);
-        highest_digits.splice(0..0, [current_digit]);
+    for digit_index in (0..row.len() - 1).rev() {
+        let current_digit = u64::from(row[digit_index]);
+        highest_digits[0][digit_index] =
+            std::cmp::max(highest_digits[0][digit_index + 1], current_digit);
     }
 
-    digits_to_number(&highest_digits)
-}
+    for i in 1..batteries {
+        let digit_magnitude = (10 as u64).pow(i as u32);
+        let last_index = row.len() - 1 - i;
+        let last_index_digit = u64::from(row[last_index]);
 
-fn digits_to_number(digits: &[u32]) -> u64 {
-    digits.iter().enumerate().fold(0, |value, (index, digit)| {
-        value + u64::from(*digit) * (10 as u64).pow((digits.len() - 1 - index) as u32)
-    })
+        highest_digits[i][last_index] =
+            digit_magnitude * last_index_digit + highest_digits[i - 1][last_index + 1];
+
+        for digit_index in (0..last_index).rev() {
+            let current_digit = u64::from(row[digit_index]);
+            let value_when_includes_current_digit =
+                current_digit * digit_magnitude + highest_digits[i - 1][digit_index + 1];
+            let value_when_ignore_current_digit = highest_digits[i][digit_index + 1];
+
+            highest_digits[i][digit_index] = std::cmp::max(
+                value_when_includes_current_digit,
+                value_when_ignore_current_digit,
+            );
+        }
+    }
+
+    dbg!(&highest_digits);
+
+    highest_digits[batteries - 1][0]
 }
 
 fn parse_digits_row(input: &str) -> Result<Vec<u32>, String> {
@@ -93,8 +91,8 @@ fn parse_digits_row(input: &str) -> Result<Vec<u32>, String> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        digits_to_number, find_highest_twelve_batteries_in_row, find_highest_two_batteries_in_row,
-        parse_digits_row, solve_part1, solve_part2,
+        find_highest_twelve_batteries_in_row, find_highest_two_batteries_in_row, parse_digits_row,
+        solve_part1, solve_part2,
     };
 
     #[test]
@@ -156,13 +154,6 @@ mod tests {
             .collect();
 
         assert_eq!(solve_part1(&input), 357);
-    }
-
-    #[test]
-    fn test_digits_to_number() {
-        assert_eq!(digits_to_number(&[1, 2, 3]), 123);
-        assert_eq!(digits_to_number(&[1]), 1);
-        assert_eq!(digits_to_number(&[9, 0, 5, 8]), 9058);
     }
 
     #[test]
