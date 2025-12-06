@@ -9,21 +9,32 @@ fn main() {
         .read_to_string(&mut input)
         .expect("stdin should be valid input");
     let parsed_input = parse_input(&input);
+    let ranges = DisjointRanges::from_iter(parsed_input.ranges.iter().cloned());
 
-    println!("Part 1: {}", solve_part1(&parsed_input));
+    println!(
+        "Part 1: {}",
+        solve_part1(&ranges, parsed_input.numbers.iter().copied())
+    );
+    println!("Part 2: {}", solve_part2(&ranges));
 }
 
-fn solve_part1(input: &ParsedInput) -> u32 {
+fn solve_part1(ranges: &DisjointRanges, numbers: impl Iterator<Item = u64>) -> u32 {
     let mut result = 0;
 
-    let ranges = DisjointRanges::from_iter(input.ranges.iter().cloned());
-    for num in input.numbers.iter() {
-        if ranges.contains(*num) {
+    for num in numbers {
+        if ranges.contains(num) {
             result += 1;
         }
     }
 
     result
+}
+
+fn solve_part2(ranges: &DisjointRanges) -> u64 {
+    ranges
+        .iter()
+        .map(|range| *range.end() - *range.start() + 1)
+        .sum()
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -154,6 +165,10 @@ impl DisjointRanges {
             );
         }
     }
+
+    fn iter(&self) -> impl Iterator<Item = &RangeInclusive<u64>> {
+        self.ranges.iter()
+    }
 }
 
 impl FromIterator<RangeInclusive<u64>> for DisjointRanges {
@@ -170,7 +185,9 @@ impl FromIterator<RangeInclusive<u64>> for DisjointRanges {
 
 #[cfg(test)]
 mod tests {
-    use crate::{DisjointRanges, ParsedInput, maybe_join_ranges, parse_input, solve_part1};
+    use crate::{
+        DisjointRanges, ParsedInput, maybe_join_ranges, parse_input, solve_part1, solve_part2,
+    };
 
     #[test]
     fn test_parse_input() {
@@ -201,8 +218,16 @@ mod tests {
             ranges: vec![3..=5, 10..=14, 16..=20, 12..=18],
             numbers: vec![1, 5, 8, 11, 17, 32],
         };
+        let ranges = DisjointRanges::from_iter(input.ranges.iter().cloned());
 
-        assert_eq!(solve_part1(&input), 3);
+        assert_eq!(solve_part1(&ranges, input.numbers.iter().copied()), 3);
+    }
+
+    #[test]
+    fn test_solve_part2() {
+        let ranges = DisjointRanges::from_iter(vec![3..=5, 10..=14, 16..=20, 12..=18]);
+
+        assert_eq!(solve_part2(&ranges), 14);
     }
 
     #[test]
