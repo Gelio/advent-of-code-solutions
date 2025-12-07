@@ -86,11 +86,11 @@ where
 {
     let start_index = lines
         .next()
-        .ok_or_else(|| format!("input is empty"))?
+        .ok_or_else(|| "input is empty".to_string())?
         .as_ref()
         .char_indices()
         .find_map(|(index, c)| (c == 'S').then_some(index))
-        .ok_or_else(|| format!("the first line does not contain the starting position"))?;
+        .ok_or_else(|| "the first line does not contain the starting position".to_string())?;
 
     let parsed_lines: Vec<ParsedInputLine> = lines
         .map(|line| {
