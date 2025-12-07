@@ -1,4 +1,7 @@
-use std::{collections::HashSet, io::stdin};
+use std::{
+    collections::{HashMap, HashSet},
+    io::stdin,
+};
 
 fn main() {
     let input = parse_input(
@@ -9,6 +12,7 @@ fn main() {
     .expect("input should be valid");
 
     println!("Part 1: {}", solve_part1(&input));
+    println!("Part 2: {}", solve_part2(&input));
 }
 
 fn solve_part1(input: &ParsedInput) -> u32 {
@@ -37,6 +41,31 @@ fn solve_part1(input: &ParsedInput) -> u32 {
     }
 
     beam_split_times
+}
+
+fn solve_part2(input: &ParsedInput) -> u64 {
+    // How many possibilities (possible ways) are there to arrive
+    // at a given index, as the beam is moving along the lines.
+    let mut beam_index_possibilites = HashMap::<usize, u64>::new();
+    beam_index_possibilites.insert(input.start_index, 1);
+
+    for line in input.lines.iter() {
+        let splitter_indexes = HashSet::<usize>::from_iter(line.splitter_indexes.iter().copied());
+        let mut next_beam_index_possibilites = HashMap::<usize, u64>::new();
+
+        for (index, split_possibilities) in beam_index_possibilites {
+            if splitter_indexes.contains(&index) {
+                *next_beam_index_possibilites.entry(index - 1).or_insert(0) += split_possibilities;
+                *next_beam_index_possibilites.entry(index + 1).or_insert(0) += split_possibilities;
+            } else {
+                *next_beam_index_possibilites.entry(index).or_insert(0) += split_possibilities;
+            }
+        }
+
+        beam_index_possibilites = next_beam_index_possibilites;
+    }
+
+    beam_index_possibilites.values().sum()
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -109,5 +138,28 @@ mod tests {
 
         let parsed_input = parse_input(input.lines()).expect("input should be valid");
         assert_eq!(solve_part1(&parsed_input), 21);
+    }
+
+    #[test]
+    fn test_solve_part2() {
+        let input = ".......S.......
+...............
+.......^.......
+...............
+......^.^......
+...............
+.....^.^.^.....
+...............
+....^.^...^....
+...............
+...^.^...^.^...
+...............
+..^...^.....^..
+...............
+.^.^.^.^.^...^.
+...............";
+
+        let parsed_input = parse_input(input.lines()).expect("input should be valid");
+        assert_eq!(solve_part2(&parsed_input), 40);
     }
 }
