@@ -18,18 +18,21 @@ fn solve_part1(input: &ParsedInput) -> u32 {
     let mut beam_split_times = 0;
 
     for line in input.lines.iter() {
-        for index in line.splitter_indexes.iter() {
-            if beam_indexes.contains(index) {
-                beam_indexes.remove(index);
-                beam_indexes.insert(index - 1);
-                // TODO: delay this call to avoid false-positives,
-                // e.g. beam_indexes = [1], splitter_indexes = [1, 2],
-                // expected_result = [1, 2],
-                // actual_result = [1, 2, 3] (because index 2 will also be split)
-                beam_indexes.insert(index + 1);
+        // NOTE: first perform the intersection, then modify the `beam_indexes`.
+        // Otherwise, modifying the `beam_indexes` could interfere with the result (there could be
+        // false-positive splits).
+        let splitter_indexes = HashSet::from_iter(line.splitter_indexes.iter().copied());
+        let split_indexes: Vec<_> = beam_indexes
+            .intersection(&splitter_indexes)
+            .copied()
+            .collect();
 
-                beam_split_times += 1;
-            }
+        for index in split_indexes {
+            beam_indexes.remove(&index);
+            beam_indexes.insert(index - 1);
+            beam_indexes.insert(index + 1);
+
+            beam_split_times += 1;
         }
     }
 
