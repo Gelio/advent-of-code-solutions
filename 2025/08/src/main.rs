@@ -129,6 +129,12 @@ impl ComponentConnector {
             let direct_connections_from_p1 = &self.direct_connections[i1];
 
             for i2 in i1 + 1..self.positions.len() {
+                // NOTE: for part 2, instead of checking `direct_connections`, we could
+                // skip i2 if they are part of the same component.
+                // This speeds up the execution from 22s to 15s.
+                // However, it breaks part 1, because in part 1 connections between positions
+                // in the same component still count towards the 1000 connections limit.
+                // Thus, let's keep using `direct_connections`.
                 if direct_connections_from_p1.contains(&i2) {
                     continue;
                 }
