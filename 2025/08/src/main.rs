@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt::Display, io::stdin, str::FromStr};
 
-use aoc_2025_08::union_find::{self, UnionFind};
+use aoc_2025_08::union_find::UnionFind;
 
 fn main() {
     let positions = parse_positions(
@@ -8,7 +8,8 @@ fn main() {
             .lines()
             .map(|line| line.expect("lines should be valid")),
     );
-    println!("Part 1: {}", solve_part1(&positions));
+    let mut connector = ComponentConnector::new(positions);
+    println!("Part 1: {}", solve_part1(&mut connector));
 }
 
 fn parse_positions(input: impl Iterator<Item = impl AsRef<str>>) -> Vec<Position> {
@@ -61,9 +62,13 @@ impl FromStr for Position {
     }
 }
 
-fn solve_part1(positions: &[Position]) -> u64 {
-    let mut component_sizes =
-        get_connected_components_sizes(positions, positions.len().max(1000) as u32);
+fn solve_part1(connector: &mut ComponentConnector) -> u64 {
+    for _ in 0..connector.positions.len().max(1000) {
+        connector.make_shortest_connection();
+    }
+
+    // NOTE: clone component_sizes so sorting does not mutate ComponentConnector's state
+    let mut component_sizes = connector.component_sizes.clone();
     component_sizes.sort();
 
     assert!(
@@ -79,26 +84,38 @@ fn solve_part1(positions: &[Position]) -> u64 {
         .expect("should have at least 3 components")
 }
 
-fn get_connected_components_sizes(positions: &[Position], connections_to_make: u32) -> Vec<u64> {
-    let mut uf = UnionFind::default();
-    let mut component_sizes: Vec<u64> = vec![1u64; positions.len()];
-    let mut direct_connections = vec![HashSet::<usize>::new(); positions.len()];
+struct ComponentConnector {
+    positions: Vec<Position>,
+    uf: UnionFind,
+    component_sizes: Vec<u64>,
+    direct_connections: Vec<HashSet<usize>>,
+}
 
-    for _ in 0..connections_to_make {
+impl ComponentConnector {
+    fn new(positions: Vec<Position>) -> Self {
+        Self {
+            uf: UnionFind::default(),
+            component_sizes: vec![1u64; positions.len()],
+            direct_connections: vec![HashSet::<usize>::new(); positions.len()],
+            positions,
+        }
+    }
+
+    fn make_shortest_connection(&mut self) {
         let mut shortest_indirect_connection: Option<(usize, usize, u64)> = None;
 
-        for (i1, p1) in positions.iter().enumerate() {
+        for (i1, p1) in self.positions.iter().enumerate() {
             let mut min_dist: Option<(usize, u64)> = None;
-            let direct_connections_from_p1 = &direct_connections[i1];
+            let direct_connections_from_p1 = &self.direct_connections[i1];
 
-            for i2 in i1 + 1..positions.len() {
+            for i2 in i1 + 1..self.positions.len() {
                 if direct_connections_from_p1.contains(&i2) {
                     continue;
                 }
 
                 // NOTE: use distance_squared since it behaves the same as regular distance
                 // and saves us the sqrt operation
-                let dist = p1.distance_squared(&positions[i2]);
+                let dist = p1.distance_squared(&self.positions[i2]);
                 match min_dist {
                     Some((_, acc_min_dist)) => {
                         if dist < acc_min_dist {
@@ -125,36 +142,34 @@ fn get_connected_components_sizes(positions: &[Position], connections_to_make: u
         }
 
         if let Some((i1, i2, dist)) = shortest_indirect_connection {
-            direct_connections[i1].insert(i2);
-            direct_connections[i2].insert(i1);
+            self.direct_connections[i1].insert(i2);
+            self.direct_connections[i2].insert(i1);
 
             // TODO: (perf) optimization possibility: do not `find` right before `union`.
             // `union` is doing its own `find` inside. Expose the "pre-union" ids from `union`.
-            let component_id1 = uf.find(i1);
-            let component_id1_size = component_sizes[component_id1];
-            component_sizes[component_id1] = 0;
+            let component_id1 = self.uf.find(i1);
+            let component_id1_size = self.component_sizes[component_id1];
+            self.component_sizes[component_id1] = 0;
 
-            let component_id2 = uf.find(i2);
-            let component_id2_size = component_sizes[component_id2];
-            component_sizes[component_id2] = 0;
+            let component_id2 = self.uf.find(i2);
+            let component_id2_size = self.component_sizes[component_id2];
+            self.component_sizes[component_id2] = 0;
 
             #[cfg(debug_assertions)]
             eprintln!(
                 "Connecting {p1:^20} and {p2:^20} (components {:2} and {:2}), dist = {dist}",
                 component_id1,
                 component_id2,
-                p1 = positions[i1],
-                p2 = positions[i2],
+                p1 = self.positions[i1],
+                p2 = self.positions[i2],
             );
 
-            let combined_id = uf.union(i1, i2);
-            component_sizes[combined_id] = component_id1_size + component_id2_size;
+            let combined_id = self.uf.union(i1, i2);
+            self.component_sizes[combined_id] = component_id1_size + component_id2_size;
         } else {
             unreachable!("no indirect connection could be made");
         }
     }
-
-    component_sizes
 }
 
 #[cfg(test)]
@@ -184,12 +199,16 @@ mod tests {
 984,92,344
 425,690,689";
         let positions = parse_positions(input.lines());
+        let mut connector = ComponentConnector::new(positions);
 
-        let mut component_sizes = get_connected_components_sizes(&positions, 10);
-        component_sizes.sort();
+        for _ in 0..10 {
+            connector.make_shortest_connection();
+        }
+        connector.component_sizes.sort();
 
         assert_eq!(
-            component_sizes
+            connector
+                .component_sizes
                 .into_iter()
                 .rev()
                 .take(6)
