@@ -20,9 +20,9 @@ fn parse_positions(input: impl Iterator<Item = impl AsRef<str>>) -> Vec<Position
 
 #[derive(Debug)]
 struct Position {
-    x: i64,
-    y: i64,
-    z: i64,
+    x: u64,
+    y: u64,
+    z: u64,
 }
 
 impl Position {
