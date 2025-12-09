@@ -1,4 +1,10 @@
-use std::{collections::HashSet, fmt::Display, io::stdin, str::FromStr};
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashSet},
+    fmt::Display,
+    io::stdin,
+    str::FromStr,
+};
 
 use aoc_2025_08::union_find::UnionFind;
 
@@ -107,16 +113,32 @@ struct ComponentConnector {
     component_sizes: Vec<u64>,
     direct_connections: Vec<HashSet<usize>>,
     components_count: usize,
+    // NOTE: Reverse so the heap stores distances from smallest to largest
+    distances: BinaryHeap<(Reverse<u64>, usize, usize)>,
 }
 
 impl ComponentConnector {
     fn new(positions: Vec<Position>) -> Self {
-        Self {
+        let mut connector = Self {
             uf: UnionFind::default(),
             component_sizes: vec![1u64; positions.len()],
             direct_connections: vec![HashSet::<usize>::new(); positions.len()],
             components_count: positions.len(),
             positions,
+            distances: BinaryHeap::default(),
+        };
+        connector.fill_distances();
+        connector
+    }
+
+    fn fill_distances(&mut self) {
+        for (i1, p1) in self.positions.iter().enumerate() {
+            for i2 in i1 + 1..self.positions.len() {
+                // NOTE: use distance_squared since it behaves the same as regular distance
+                // and saves us the sqrt operation
+                let dist = p1.distance_squared(&self.positions[i2]);
+                self.distances.push((Reverse(dist), i1, i2));
+            }
         }
     }
 
@@ -124,47 +146,12 @@ impl ComponentConnector {
     fn make_shortest_connection(&mut self) -> Option<(usize, usize)> {
         let mut shortest_indirect_connection: Option<(usize, usize, u64)> = None;
 
-        for (i1, p1) in self.positions.iter().enumerate() {
-            let mut min_dist: Option<(usize, u64)> = None;
-            let direct_connections_from_p1 = &self.direct_connections[i1];
-
-            for i2 in i1 + 1..self.positions.len() {
-                // NOTE: for part 2, instead of checking `direct_connections`, we could
-                // skip i2 if they are part of the same component.
-                // This speeds up the execution from 22s to 15s.
-                // However, it breaks part 1, because in part 1 connections between positions
-                // in the same component still count towards the 1000 connections limit.
-                // Thus, let's keep using `direct_connections`.
-                if direct_connections_from_p1.contains(&i2) {
-                    continue;
-                }
-
-                // NOTE: use distance_squared since it behaves the same as regular distance
-                // and saves us the sqrt operation
-                let dist = p1.distance_squared(&self.positions[i2]);
-                match min_dist {
-                    Some((_, acc_min_dist)) => {
-                        if dist < acc_min_dist {
-                            min_dist = Some((i2, dist));
-                        }
-                    }
-                    None => {
-                        min_dist = Some((i2, dist));
-                    }
-                }
+        while let Some((dist, i1, i2)) = self.distances.pop() {
+            if self.direct_connections[i1].contains(&i2) {
+                continue;
             }
-
-            match (shortest_indirect_connection, min_dist) {
-                (Some((_, _, acc_min_dist)), Some((i2, current_min_dist))) => {
-                    if current_min_dist < acc_min_dist {
-                        shortest_indirect_connection = Some((i1, i2, current_min_dist));
-                    }
-                }
-                (None, Some((i2, current_min_dist))) => {
-                    shortest_indirect_connection = Some((i1, i2, current_min_dist));
-                }
-                (_, _) => {}
-            };
+            shortest_indirect_connection = Some((i1, i2, dist.0));
+            break;
         }
 
         if let Some((i1, i2, dist)) = shortest_indirect_connection {
