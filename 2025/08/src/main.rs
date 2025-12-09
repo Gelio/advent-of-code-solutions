@@ -10,6 +10,7 @@ fn main() {
     );
     let mut connector = ComponentConnector::new(positions);
     println!("Part 1: {}", solve_part1(&mut connector));
+    println!("Part 2: {}", solve_part2(&mut connector));
 }
 
 fn parse_positions(input: impl Iterator<Item = impl AsRef<str>>) -> Vec<Position> {
@@ -84,11 +85,28 @@ fn solve_part1(connector: &mut ComponentConnector) -> u64 {
         .expect("should have at least 3 components")
 }
 
+fn solve_part2(connector: &mut ComponentConnector) -> u64 {
+    loop {
+        let maybe_connection = connector.make_shortest_connection();
+
+        if connector.components_count == 1 {
+            let (i1, i2) = maybe_connection
+                .expect("connections should be made since the graph is not complete");
+
+            let p1 = &connector.positions[i1];
+            let p2 = &connector.positions[i2];
+
+            return p1.x * p2.x;
+        }
+    }
+}
+
 struct ComponentConnector {
     positions: Vec<Position>,
     uf: UnionFind,
     component_sizes: Vec<u64>,
     direct_connections: Vec<HashSet<usize>>,
+    components_count: usize,
 }
 
 impl ComponentConnector {
@@ -97,11 +115,13 @@ impl ComponentConnector {
             uf: UnionFind::default(),
             component_sizes: vec![1u64; positions.len()],
             direct_connections: vec![HashSet::<usize>::new(); positions.len()],
+            components_count: positions.len(),
             positions,
         }
     }
 
-    fn make_shortest_connection(&mut self) {
+    // Returns the indexes of the connected positions, if the connection was made
+    fn make_shortest_connection(&mut self) -> Option<(usize, usize)> {
         let mut shortest_indirect_connection: Option<(usize, usize, u64)> = None;
 
         for (i1, p1) in self.positions.iter().enumerate() {
@@ -166,6 +186,11 @@ impl ComponentConnector {
 
             let combined_id = self.uf.union(i1, i2);
             self.component_sizes[combined_id] = component_id1_size + component_id2_size;
+            if component_id1 != component_id2 {
+                self.components_count -= 1;
+            }
+
+            Some((i1, i2))
         } else {
             unreachable!("no indirect connection could be made");
         }
@@ -215,6 +240,34 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![5, 4, 2, 2, 1, 1]
         );
+    }
+
+    #[test]
+    fn test_solve_part2() {
+        let input = "162,817,812
+57,618,57
+906,360,560
+592,479,940
+352,342,300
+466,668,158
+542,29,236
+431,825,988
+739,650,466
+52,470,668
+216,146,977
+819,987,18
+117,168,530
+805,96,715
+346,949,466
+970,615,88
+941,993,340
+862,61,35
+984,92,344
+425,690,689";
+        let positions = parse_positions(input.lines());
+        let mut connector = ComponentConnector::new(positions);
+
+        assert_eq!(solve_part2(&mut connector), 25272);
     }
 
     #[test]
