@@ -56,25 +56,14 @@ fn solve_part2(points: &Vec<Position>) -> u128 {
         }
     }
 
-    'rectangles: while let Some((area, p1, p2)) = rectangles.pop() {
-        for segment in points.windows(2) {
-            let p3 = &segment[0];
-            let p4 = &segment[1];
+    let mut perimeter = get_perimeter_segments(points);
+    normalize_perimeter(&mut perimeter);
 
+    'rectangles: while let Some((area, p1, p2)) = rectangles.pop() {
+        for (p3, p4) in perimeter.iter() {
             if rectangle_intersects_segment((&p1, &p2), (p3, p4)) {
                 continue 'rectangles;
             }
-        }
-
-        // NOTE: also check the final line
-        if rectangle_intersects_segment(
-            (&p1, &p2),
-            (
-                &points.last().expect("points should not be empty"),
-                &points[0],
-            ),
-        ) {
-            continue 'rectangles;
         }
 
         dbg!(&p1, &p2);
@@ -82,6 +71,29 @@ fn solve_part2(points: &Vec<Position>) -> u128 {
     }
 
     unreachable!("some rectangle must be valid");
+}
+
+fn get_perimeter_segments(points: &Vec<Position>) -> Vec<(Position, Position)> {
+    let mut perimeter_segments: Vec<(Position, Position)> = Vec::new();
+
+    for segment in points.windows(2) {
+        let p3 = &segment[0];
+        let p4 = &segment[1];
+
+        perimeter_segments.push((p3.clone(), p4.clone()));
+    }
+
+    perimeter_segments.push((
+        points.last().expect("points should not be empty").clone(),
+        points[0].clone(),
+    ));
+
+    perimeter_segments
+}
+
+fn normalize_perimeter(perimeter: &mut Vec<(Position, Position)>) {
+    // TODO:
+    // TODO: remember to also check the perimeter[last] and perimeter[0] segment
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -301,6 +313,81 @@ mod tests {
                 (&Position::new(2, 3), &Position::new(3, 5))
             ),
             false
+        );
+    }
+
+    #[test]
+    fn test_normalize_perimeter() {
+        fn get_normalized_perimeter_points(points: &Vec<Position>) -> Vec<Position> {
+            let mut perimeter = get_perimeter_segments(&points);
+            normalize_perimeter(&mut perimeter);
+            perimeter.into_iter().map(|(p1, _)| p1).collect()
+        }
+
+        assert_eq!(
+            get_normalized_perimeter_points(&vec![
+                Position::new(1, 5),
+                Position::new(5, 5),
+                // NOTE: the next 2 points are a segment of length 1
+                Position::new(5, 0),
+                Position::new(6, 0),
+                Position::new(6, 4),
+                Position::new(10, 4),
+                Position::new(10, 9),
+                Position::new(1, 9)
+            ]),
+            vec![
+                Position::new(1, 5),
+                Position::new(5, 5),
+                Position::new(5, 4),
+                Position::new(10, 4),
+                Position::new(10, 9),
+                Position::new(1, 9)
+            ]
+        );
+
+        assert_eq!(
+            get_normalized_perimeter_points(&vec![
+                Position::new(3, 5),
+                Position::new(3, 2),
+                // NOTE: the next 2 points are a segment of length 1
+                Position::new(0, 2),
+                Position::new(0, 1),
+                Position::new(5, 1),
+                Position::new(5, -2),
+                Position::new(7, -2),
+                Position::new(7, 3),
+            ]),
+            vec![
+                Position::new(3, 5),
+                Position::new(3, 1),
+                Position::new(5, 1),
+                Position::new(5, -2),
+                Position::new(7, -2),
+                Position::new(7, 3),
+            ]
+        );
+
+        assert_eq!(
+            get_normalized_perimeter_points(&vec![
+                Position::new(3, 5),
+                // NOTE: the next 2 points are a segment of length 1,
+                // but they are not "making a dent" in the figure,
+                // so they are not normalized and should be left as they are
+                Position::new(3, 1),
+                Position::new(4, 1),
+                Position::new(4, -2),
+                Position::new(7, -2),
+                Position::new(7, 3),
+            ]),
+            vec![
+                Position::new(3, 5),
+                Position::new(3, 1),
+                Position::new(4, 1),
+                Position::new(4, -2),
+                Position::new(7, -2),
+                Position::new(7, 3),
+            ]
         );
     }
 
