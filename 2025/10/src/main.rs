@@ -1,4 +1,8 @@
-use std::{io::stdin, str::FromStr};
+use std::{
+    collections::{HashMap, VecDeque},
+    io::stdin,
+    str::FromStr,
+};
 
 fn main() {
     let problems: Vec<Problem> = stdin()
@@ -18,14 +22,52 @@ fn solve_part1(problems: &Vec<Problem>) -> u32 {
     problems.iter().map(solve_problem_part1).sum()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GraphNode {
+    state: LightsStateBits,
+    distance_from_start: u32,
+}
+
 fn solve_problem_part1(problem: &Problem) -> u32 {
-    todo!()
+    let mut nodes_to_visit: VecDeque<GraphNode> = VecDeque::new();
+    nodes_to_visit.push_back(GraphNode {
+        state: 0,
+        distance_from_start: 0,
+    });
+    let mut visited_nodes: HashMap<LightsStateBits, GraphNode> = HashMap::new();
+
+    while !visited_nodes.contains_key(&problem.final_lights_state.bits) {
+        let node = nodes_to_visit.pop_front().expect(
+            "nodes to visit queue should not be exhausted before reaching the goal lights state",
+        );
+
+        for button_press in problem.button_presses.iter() {
+            let next_node_state = toggle_lights(node.state, button_press);
+
+            if visited_nodes.contains_key(&next_node_state) {
+                continue;
+            }
+
+            let next_node = GraphNode {
+                state: next_node_state,
+                distance_from_start: node.distance_from_start + 1,
+            };
+            visited_nodes.insert(next_node_state, next_node.clone());
+
+            nodes_to_visit.push_back(next_node);
+        }
+    }
+
+    visited_nodes
+        .get(&problem.final_lights_state.bits)
+        .expect("final node was found")
+        .distance_from_start
 }
 
 // Problem represents a single line of the input
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Problem {
-    initial_lights_state: LightsState,
+    final_lights_state: LightsState,
     button_presses: Vec<ButtonPress>,
 }
 
@@ -86,7 +128,7 @@ impl FromStr for Problem {
         }
 
         Ok(Problem {
-            initial_lights_state: lights_state,
+            final_lights_state: lights_state,
             button_presses,
         })
     }
@@ -94,13 +136,15 @@ impl FromStr for Problem {
 
 type LightsStateBits = u16;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct LightsState {
     // Example: .##. means: off, on, on, off.
     // Represented as bits in a u16: 0b0110 = 6 (since the light position matters)
     bits: LightsStateBits,
     // Size of the input (how many lights there are).
     // Example: for .##. this would be 4.
+    // TODO: remove this field from the struct since it never changes for the entire problem.
+    // It is unnecessarily cloned and copied.
     len: usize,
 }
 
@@ -150,11 +194,8 @@ impl ButtonPress {
     }
 }
 
-fn toggle_lights(state: &LightsState, button: &ButtonPress) -> LightsState {
-    LightsState {
-        bits: state.bits ^ button.lights_switched_bits,
-        len: state.len,
-    }
+fn toggle_lights(state: LightsStateBits, button: &ButtonPress) -> LightsStateBits {
+    state ^ button.lights_switched_bits
 }
 
 #[cfg(test)]
@@ -187,15 +228,15 @@ mod tests {
     fn test_toggle_lights() {
         let state: LightsState = ".##.".parse().unwrap();
         let button = ButtonPress::new(&vec![0, 2], state.len);
-        let new_state = toggle_lights(&state, &button);
-        assert_eq!(new_state.bits, 0b1100);
+        let new_state = toggle_lights(state.bits, &button);
+        assert_eq!(new_state, 0b1100);
     }
 
     #[test]
     fn test_problem_from_str() {
         let input = "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}";
         let problem: Problem = input.parse().unwrap();
-        assert_eq!(problem.initial_lights_state.bits, 0b0110);
+        assert_eq!(problem.final_lights_state.bits, 0b0110);
         assert_eq!(
             problem.button_presses,
             vec![
