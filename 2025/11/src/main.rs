@@ -9,6 +9,7 @@ fn main() {
     .expect("input should be valid");
 
     println!("Part 1: {}", solve_part1(&graph));
+    println!("Part 2: {}", solve_part2(&graph));
 }
 
 fn solve_part1(graph: &Graph) -> u32 {
@@ -57,6 +58,82 @@ fn solve_part1(graph: &Graph) -> u32 {
     solver.visit(start_node_index);
 
     solver.paths_to_out_count[start_node_index]
+}
+
+fn solve_part2(graph: &Graph) -> u64 {
+    // NOTE: indexes into the `paths_to_finish` array
+    const THROUGH_FFT_INDEX: usize = 0;
+    const THROUGH_DAC_INDEX: usize = 1;
+    const THROUGH_FFT_AND_DAC_INDEX: usize = 2;
+    const OTHER_INDEX: usize = 3;
+
+    #[derive(Debug, Default, Clone)]
+    struct NodeState {
+        visited: bool,
+        paths_to_finish: [u64; 4],
+    }
+
+    struct Solver<'a> {
+        node_states: Vec<NodeState>,
+        graph: &'a Graph,
+    }
+
+    impl<'a> Solver<'a> {
+        fn visit(&mut self, index: usize) {
+            self.node_states[index].visited = true;
+            let node = &self.graph.nodes[index];
+
+            for &neighbor_index in node.neighbor_indexes.iter() {
+                if !self.node_states[neighbor_index].visited {
+                    self.visit(neighbor_index);
+                }
+
+                for i in 0..self.node_states[index].paths_to_finish.len() {
+                    self.node_states[index].paths_to_finish[i] +=
+                        self.node_states[neighbor_index].paths_to_finish[i];
+                }
+            }
+
+            let paths_to_finish = &mut self.node_states[index].paths_to_finish;
+            match self.graph.nodes[index].name.as_ref() {
+                "fft" => {
+                    paths_to_finish[THROUGH_FFT_AND_DAC_INDEX] = paths_to_finish[THROUGH_DAC_INDEX];
+                    paths_to_finish[THROUGH_DAC_INDEX] = 0;
+                    paths_to_finish[THROUGH_FFT_INDEX] = paths_to_finish[OTHER_INDEX];
+                    paths_to_finish[OTHER_INDEX] = 0;
+                }
+                "dac" => {
+                    paths_to_finish[THROUGH_FFT_AND_DAC_INDEX] = paths_to_finish[THROUGH_FFT_INDEX];
+                    paths_to_finish[THROUGH_FFT_INDEX] = 0;
+                    paths_to_finish[THROUGH_DAC_INDEX] = paths_to_finish[OTHER_INDEX];
+                    paths_to_finish[OTHER_INDEX] = 0;
+                }
+                _ => {}
+            };
+        }
+    }
+
+    let out_node_index = *graph
+        .node_indexes_by_name
+        .get("out")
+        .expect("'out' node should exist");
+
+    let mut solver = Solver {
+        graph,
+        node_states: {
+            let mut node_states = vec![NodeState::default(); graph.nodes.len()];
+            node_states[out_node_index].paths_to_finish[OTHER_INDEX] = 1;
+            node_states
+        },
+    };
+
+    let start_node_index = *graph
+        .node_indexes_by_name
+        .get("svr")
+        .expect("'svr' node should exist");
+    solver.visit(start_node_index);
+
+    solver.node_states[start_node_index].paths_to_finish[THROUGH_FFT_AND_DAC_INDEX]
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -210,5 +287,26 @@ iii: out";
         let graph = Graph::parse(input.lines()).expect("input should be valid");
 
         assert_eq!(solve_part1(&graph), 5);
+    }
+
+    #[test]
+    fn test_solve_part2() {
+        let input = "svr: aaa bbb
+aaa: fft
+fft: ccc
+bbb: tty
+tty: ccc
+ccc: ddd eee
+ddd: hub
+hub: fff
+eee: dac
+dac: fff
+fff: ggg hhh
+ggg: out
+hhh: out";
+
+        let graph = Graph::parse(input.lines()).expect("input should be valid");
+
+        assert_eq!(solve_part2(&graph), 2);
     }
 }
