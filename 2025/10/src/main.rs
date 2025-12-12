@@ -69,6 +69,7 @@ fn solve_problem_part1(problem: &Problem) -> u32 {
 struct Problem {
     final_lights_state: LightsState,
     button_presses: Vec<ButtonPress>,
+    expected_joltage_ratings: Vec<u32>,
 }
 
 impl FromStr for Problem {
@@ -80,6 +81,7 @@ impl FromStr for Problem {
 
         let mut lights_state: Option<LightsState> = None;
         let mut button_presses: Vec<ButtonPress> = Vec::new();
+        let mut expected_joltage_ratings: Option<Vec<u32>> = None;
 
         for part in s.split_whitespace() {
             match part.chars().nth(0) {
@@ -111,7 +113,14 @@ impl FromStr for Problem {
                     if !part.ends_with('}') {
                         return Err("missing closing '}' in ignored part".to_string());
                     }
-                    // Ignore this part (the joltage) for now.
+
+                    if expected_joltage_ratings.is_some() {
+                        return Err("multiple expected joltage ratings found".to_string());
+                    }
+
+                    let numbers = parse_numbers(&part[1..part.len() - 1])
+                        .map_err(|err| format!("cannot parse joltage levels in {part}: {err:?}"))?;
+                    expected_joltage_ratings = Some(numbers);
                 }
                 Some(_) => {
                     return Err(format!("unexpected part in input: '{part}'"));
@@ -126,10 +135,20 @@ impl FromStr for Problem {
         if button_presses.is_empty() {
             return Err("no button presses found".to_string());
         }
+        let expected_joltage_ratings =
+            expected_joltage_ratings.ok_or("missing expected joltage ratings")?;
+        if expected_joltage_ratings.len() != lights_state.len {
+            return Err(format!(
+                "expected joltage ratings length {} does not match lights count {}",
+                expected_joltage_ratings.len(),
+                lights_state.len
+            ));
+        }
 
         Ok(Problem {
             final_lights_state: lights_state,
             button_presses,
+            expected_joltage_ratings,
         })
     }
 }
@@ -248,6 +267,7 @@ mod tests {
                 ButtonPress::new(&vec![0, 1], 4),
             ]
         );
+        assert_eq!(problem.expected_joltage_ratings, vec![3, 5, 4, 7]);
     }
 
     #[test]
