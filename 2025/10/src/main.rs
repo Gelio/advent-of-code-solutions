@@ -16,19 +16,24 @@ fn main() {
         .collect();
 
     println!("Part 1: {}", solve_part1(&problems));
+    println!("Part 2: {}", solve_part2(&problems));
 }
 
 fn solve_part1(problems: &Vec<Problem>) -> u32 {
     problems.iter().map(solve_problem_part1).sum()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct GraphNode {
-    state: LightsStateBits,
-    distance_from_start: u32,
+fn solve_part2(problems: &Vec<Problem>) -> u32 {
+    problems.iter().map(solve_problem_part2).sum()
 }
 
 fn solve_problem_part1(problem: &Problem) -> u32 {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct GraphNode {
+        state: LightsStateBits,
+        distance_from_start: u32,
+    }
+
     let mut nodes_to_visit: VecDeque<GraphNode> = VecDeque::new();
     nodes_to_visit.push_back(GraphNode {
         state: 0,
@@ -62,6 +67,86 @@ fn solve_problem_part1(problem: &Problem) -> u32 {
         .get(&problem.final_lights_state.bits)
         .expect("final node was found")
         .distance_from_start
+}
+
+fn solve_problem_part2(problem: &Problem) -> u32 {
+    let lights_count = problem.final_lights_state.len;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct NodeToVisit {
+        joltage_ratings: Vec<u32>,
+        distance_from_start: u32,
+    }
+
+    // TODO: use a BinaryHeap for a priority queue.
+    // Estimate metric to finish: minimum_distance_to_finish = (expected_joltage_ratings - joltage_ratings).sum()
+    // After finding *some* solution, keep trying. Maybe there is a shorter path.
+    // Keep trying until the best solution found so far is shorter than
+    // distance_from_start + minimum_distance_to_finish
+    let mut nodes_to_visit: VecDeque<NodeToVisit> = VecDeque::new();
+    nodes_to_visit.push_back(NodeToVisit {
+        joltage_ratings: vec![0; lights_count],
+        distance_from_start: 0,
+    });
+    let mut visited_nodes_distance_from_start: HashMap<Vec<u32>, u32> = HashMap::new();
+
+    while !visited_nodes_distance_from_start.contains_key(&problem.expected_joltage_ratings) {
+        let node = nodes_to_visit.pop_front().expect(
+            "nodes to visit queue should not be exhausted before reaching the goal joltage ratings",
+        );
+        // println!(
+        //     "Visiting {:?} (dist = {})",
+        //     node.joltage_ratings, node.distance_from_start
+        // );
+
+        for button_press in problem.button_presses.iter() {
+            let mut next_node_joltage = node.joltage_ratings.clone();
+            increase_joltage(&mut next_node_joltage, button_press);
+
+            if is_joltage_too_high(&next_node_joltage, &problem.expected_joltage_ratings) {
+                continue;
+            }
+
+            if visited_nodes_distance_from_start.contains_key(&next_node_joltage) {
+                continue;
+            }
+
+            let next_node = NodeToVisit {
+                joltage_ratings: next_node_joltage.clone(),
+                distance_from_start: node.distance_from_start + 1,
+            };
+            visited_nodes_distance_from_start
+                .insert(next_node_joltage, node.distance_from_start + 1);
+
+            nodes_to_visit.push_back(next_node);
+        }
+    }
+
+    // println!(
+    //     "Solved problem, visited {} nodes, wanted to visit {} more nodes",
+    //     visited_nodes_distance_from_start.len(),
+    //     nodes_to_visit.len()
+    // );
+
+    *visited_nodes_distance_from_start
+        .get(&problem.expected_joltage_ratings)
+        .expect("final node was found")
+}
+
+fn increase_joltage(joltage: &mut Vec<u32>, button_press: &ButtonPress) {
+    for light_index in button_press.lights_switched.iter() {
+        joltage[*light_index as usize] += 1;
+    }
+}
+
+fn is_joltage_too_high(joltage: &Vec<u32>, expected_joltage: &Vec<u32>) -> bool {
+    for (current, expected) in joltage.iter().zip(expected_joltage.iter()) {
+        if current > expected {
+            return true;
+        }
+    }
+
+    false
 }
 
 // Problem represents a single line of the input
@@ -106,7 +191,7 @@ impl FromStr for Problem {
                         .as_ref()
                         .ok_or("button press found before lights state")?
                         .len;
-                    let button_press = ButtonPress::new(&numbers, lights_len);
+                    let button_press = ButtonPress::new(numbers, lights_len);
                     button_presses.push(button_press);
                 }
                 Some('{') => {
@@ -199,16 +284,18 @@ fn parse_numbers(input: &str) -> Result<Vec<u32>, String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ButtonPress {
     lights_switched_bits: LightsStateBits,
+    lights_switched: Vec<u32>,
 }
 
 impl ButtonPress {
-    fn new(lights_switched: &Vec<u32>, lights_len: usize) -> Self {
+    fn new(lights_switched: Vec<u32>, lights_len: usize) -> Self {
         let mut bits = 0u16;
-        for &light in lights_switched {
+        for &light in lights_switched.iter() {
             bits |= 1 << (lights_len - 1 - light as usize);
         }
         ButtonPress {
             lights_switched_bits: bits,
+            lights_switched,
         }
     }
 }
@@ -239,14 +326,14 @@ mod tests {
 
     #[test]
     fn test_button_press_new() {
-        let button = ButtonPress::new(&vec![1, 3], 5);
+        let button = ButtonPress::new(vec![1, 3], 5);
         assert_eq!(button.lights_switched_bits, 0b01010);
     }
 
     #[test]
     fn test_toggle_lights() {
         let state: LightsState = ".##.".parse().unwrap();
-        let button = ButtonPress::new(&vec![0, 2], state.len);
+        let button = ButtonPress::new(vec![0, 2], state.len);
         let new_state = toggle_lights(state.bits, &button);
         assert_eq!(new_state, 0b1100);
     }
@@ -259,12 +346,12 @@ mod tests {
         assert_eq!(
             problem.button_presses,
             vec![
-                ButtonPress::new(&vec![3], 4),
-                ButtonPress::new(&vec![1, 3], 4),
-                ButtonPress::new(&vec![2], 4),
-                ButtonPress::new(&vec![2, 3], 4),
-                ButtonPress::new(&vec![0, 2], 4),
-                ButtonPress::new(&vec![0, 1], 4),
+                ButtonPress::new(vec![3], 4),
+                ButtonPress::new(vec![1, 3], 4),
+                ButtonPress::new(vec![2], 4),
+                ButtonPress::new(vec![2, 3], 4),
+                ButtonPress::new(vec![0, 2], 4),
+                ButtonPress::new(vec![0, 1], 4),
             ]
         );
         assert_eq!(problem.expected_joltage_ratings, vec![3, 5, 4, 7]);
@@ -286,5 +373,23 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(solve_problem_part1(&problem), 2);
+    }
+
+    #[test]
+    fn test_solve_problem_part2() {
+        let problem: Problem = "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}"
+            .parse()
+            .unwrap();
+        assert_eq!(solve_problem_part2(&problem), 10);
+
+        let problem: Problem = "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}"
+            .parse()
+            .unwrap();
+        assert_eq!(solve_problem_part2(&problem), 12);
+
+        let problem: Problem = "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}"
+            .parse()
+            .unwrap();
+        assert_eq!(solve_problem_part2(&problem), 11);
     }
 }
