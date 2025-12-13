@@ -1,5 +1,6 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap, VecDeque},
     io::stdin,
     str::FromStr,
 };
@@ -76,24 +77,81 @@ fn solve_problem_part2(problem: &Problem) -> u32 {
     struct NodeToVisit {
         joltage_ratings: Vec<u32>,
         distance_from_start: u32,
+        estimated_distance_to_finish: u32,
+        // Must be equal to `distance_from_start` + `estimated_distance_to_finish`
+        estimated_total_distance_from_start_to_finish: u32,
     }
 
-    // TODO: use a BinaryHeap for a priority queue.
-    // Estimate metric to finish: minimum_distance_to_finish = (expected_joltage_ratings - joltage_ratings).sum()
-    // After finding *some* solution, keep trying. Maybe there is a shorter path.
-    // Keep trying until the best solution found so far is shorter than
-    // distance_from_start + minimum_distance_to_finish
-    let mut nodes_to_visit: VecDeque<NodeToVisit> = VecDeque::new();
-    nodes_to_visit.push_back(NodeToVisit {
-        joltage_ratings: vec![0; lights_count],
-        distance_from_start: 0,
-    });
+    impl NodeToVisit {
+        fn new(
+            joltage_ratings: Vec<u32>,
+            distance_from_start: u32,
+            expected_joltage_ratings: &Vec<u32>,
+            min_button_press_lights_switched: u32,
+        ) -> Self {
+            let estimated_distance_to_finish = joltage_ratings
+                .iter()
+                .zip(expected_joltage_ratings)
+                .map(|(joltage, expected_joltage)| expected_joltage - joltage)
+                .sum::<u32>()
+                / min_button_press_lights_switched;
+
+            Self {
+                distance_from_start,
+                estimated_distance_to_finish,
+                joltage_ratings,
+                estimated_total_distance_from_start_to_finish: distance_from_start
+                    + estimated_distance_to_finish,
+            }
+        }
+    }
+
+    impl Ord for NodeToVisit {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.estimated_total_distance_from_start_to_finish
+                .cmp(&other.estimated_total_distance_from_start_to_finish)
+        }
+    }
+
+    impl PartialOrd for NodeToVisit {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    // TODO: check if there are lights that are only switched by a single button.
+    // If yes, start by pressing that button to satisfy the joltage.
+
+    let min_button_press_lights_switched = problem
+        .button_presses
+        .iter()
+        .map(|bp| bp.lights_switched.len() as u32)
+        .min()
+        .expect("there should be at least one button press");
+
+    let expected_joltage_ratings = &problem.expected_joltage_ratings;
+    // NOTE: `NodeToVisit`'s Ord orders by `estimated_total_distance_from_start_to_finish` in
+    // ascending order.
+    // The binary heap will return "max" values first. This would return nodes that have
+    // the greatest total distance estimate.
+    // We want to explore those with the smallest total distance. Thus, `Reverse` is used here.
+    let mut nodes_to_visit: BinaryHeap<Reverse<NodeToVisit>> = BinaryHeap::new();
+    nodes_to_visit.push(Reverse(NodeToVisit::new(
+        vec![0; lights_count],
+        0,
+        expected_joltage_ratings,
+        min_button_press_lights_switched,
+    )));
     let mut visited_nodes_distance_from_start: HashMap<Vec<u32>, u32> = HashMap::new();
 
-    while !visited_nodes_distance_from_start.contains_key(&problem.expected_joltage_ratings) {
-        let node = nodes_to_visit.pop_front().expect(
+    // TODO: (maybe) After finding *some* solution, keep trying. Maybe there is a shorter path.
+    // Keep trying until the best solution found so far is shorter than
+    // distance_from_start + minimum_distance_to_finish
+
+    while !visited_nodes_distance_from_start.contains_key(expected_joltage_ratings) {
+        let node = nodes_to_visit.pop().expect(
             "nodes to visit queue should not be exhausted before reaching the goal joltage ratings",
-        );
+        ).0;
         // println!(
         //     "Visiting {:?} (dist = {})",
         //     node.joltage_ratings, node.distance_from_start
@@ -111,14 +169,16 @@ fn solve_problem_part2(problem: &Problem) -> u32 {
                 continue;
             }
 
-            let next_node = NodeToVisit {
-                joltage_ratings: next_node_joltage.clone(),
-                distance_from_start: node.distance_from_start + 1,
-            };
+            let next_node = NodeToVisit::new(
+                next_node_joltage.clone(),
+                node.distance_from_start + 1,
+                expected_joltage_ratings,
+                min_button_press_lights_switched,
+            );
             visited_nodes_distance_from_start
                 .insert(next_node_joltage, node.distance_from_start + 1);
 
-            nodes_to_visit.push_back(next_node);
+            nodes_to_visit.push(Reverse(next_node));
         }
     }
 
