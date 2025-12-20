@@ -1,4 +1,10 @@
-use std::{collections::BinaryHeap, fmt::Display, io::stdin, ops::Sub, str::FromStr};
+use std::{
+    collections::BinaryHeap,
+    fmt::Display,
+    io::stdin,
+    ops::{Add, Div, Mul, Sub},
+    str::FromStr,
+};
 
 fn main() {
     let points = parse_input(
@@ -56,8 +62,9 @@ fn solve_part2(points: &Vec<Position>) -> u128 {
         }
     }
 
-    let mut perimeter = get_perimeter_segments(points);
-    normalize_perimeter(&mut perimeter);
+    let mut perimeter_points = points.clone();
+    normalize_perimeter(&mut perimeter_points);
+    let perimeter = get_perimeter_segments(&perimeter_points);
 
     'rectangles: while let Some((area, p1, p2)) = rectangles.pop() {
         for (p3, p4) in perimeter.iter() {
@@ -91,9 +98,68 @@ fn get_perimeter_segments(points: &Vec<Position>) -> Vec<(Position, Position)> {
     perimeter_segments
 }
 
-fn normalize_perimeter(perimeter: &mut Vec<(Position, Position)>) {
-    // TODO:
-    // TODO: remember to also check the perimeter[last] and perimeter[0] segment
+fn normalize_perimeter(perimeter: &mut Vec<Position>) {
+    let mut i = 0;
+    while i < perimeter.len() {
+        let i_plus1 = (i + 1) % perimeter.len();
+
+        let i_plus2 = (i + 2) % perimeter.len();
+        let i_plus3 = (i + 3) % perimeter.len();
+        let i_plus4 = (i + 4) % perimeter.len();
+
+        if (&perimeter[i_plus3] - &perimeter[i_plus2]).len() > 1 {
+            i += 1;
+            continue;
+        }
+
+        // Try shortening forwards (extend (i, i+1) by 1
+        let extended_segment_end =
+            &perimeter[i_plus1] + &(&perimeter[i_plus1] - &perimeter[i]).norm();
+
+        if is_point_in_segment(
+            (&perimeter[i_plus3], &perimeter[i_plus4]),
+            &extended_segment_end,
+        ) {
+            perimeter[i_plus1] = extended_segment_end;
+
+            // Remove points i+3 and i+2, watching out for vector bounds
+            perimeter.remove((i + 3) % perimeter.len());
+            if i + 3 >= perimeter.len() {
+                i -= 1;
+            }
+            perimeter.remove((i + 2) % perimeter.len());
+            if i + 2 >= perimeter.len() {
+                i -= 1;
+            }
+
+            continue;
+        }
+
+        // Try shortening "backwards" (extend (i+5, i+4) by 1)
+        let i_plus5 = (i + 5) % perimeter.len();
+        let extended_segment_end =
+            &perimeter[i_plus4] + &(&perimeter[i_plus4] - &perimeter[i_plus5]).norm();
+
+        if is_point_in_segment(
+            (&perimeter[i_plus1], &perimeter[i_plus2]),
+            &extended_segment_end,
+        ) {
+            perimeter[i_plus2] = extended_segment_end;
+            // Remove points i+3 and i+4, watching out for vector bounds
+            perimeter.remove((i + 4) % perimeter.len());
+            if i + 4 >= perimeter.len() {
+                i -= 1;
+            }
+            perimeter.remove((i + 3) % perimeter.len());
+            if i + 3 >= perimeter.len() {
+                i -= 1;
+            }
+
+            continue;
+        }
+
+        i += 1;
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -134,9 +200,50 @@ impl Sub for &Position {
     }
 }
 
+impl Div<u128> for &Position {
+    type Output = Position;
+
+    fn div(self, rhs: u128) -> Self::Output {
+        Self::Output {
+            x: self.x / rhs as i128,
+            y: self.y / rhs as i128,
+        }
+    }
+}
+
+impl Mul<u128> for &Position {
+    type Output = Position;
+
+    fn mul(self, rhs: u128) -> Self::Output {
+        Self::Output {
+            x: self.x * rhs as i128,
+            y: self.y * rhs as i128,
+        }
+    }
+}
+
+impl Add for &Position {
+    type Output = Position;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
 impl Position {
     fn new(x: i128, y: i128) -> Self {
         Self { x, y }
+    }
+
+    fn len(&self) -> u128 {
+        (self.x.pow(2) + self.y.pow(2)).isqrt() as u128
+    }
+
+    fn norm(&self) -> Self {
+        self / self.len()
     }
 }
 
@@ -144,6 +251,13 @@ impl Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.pad(&format!("{},{}", self.x, self.y))
     }
+}
+
+fn is_point_in_segment((p1, p2): (&Position, &Position), p3: &Position) -> bool {
+    let p2 = p2 - p1;
+    let p3 = p3 - p1;
+
+    &p2.norm() * p3.len() == p3 && p2.len() >= p3.len()
 }
 
 fn rectangle_intersects_segment(
@@ -318,14 +432,13 @@ mod tests {
 
     #[test]
     fn test_normalize_perimeter() {
-        fn get_normalized_perimeter_points(points: &Vec<Position>) -> Vec<Position> {
-            let mut perimeter = get_perimeter_segments(&points);
-            normalize_perimeter(&mut perimeter);
-            perimeter.into_iter().map(|(p1, _)| p1).collect()
+        fn get_normalized_perimeter_points(points: &mut Vec<Position>) -> &mut Vec<Position> {
+            normalize_perimeter(points);
+            points
         }
 
         assert_eq!(
-            get_normalized_perimeter_points(&vec![
+            get_normalized_perimeter_points(&mut vec![
                 Position::new(1, 5),
                 Position::new(5, 5),
                 // NOTE: the next 2 points are a segment of length 1
@@ -336,7 +449,7 @@ mod tests {
                 Position::new(10, 9),
                 Position::new(1, 9)
             ]),
-            vec![
+            &mut vec![
                 Position::new(1, 5),
                 Position::new(5, 5),
                 Position::new(5, 4),
@@ -347,7 +460,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_normalized_perimeter_points(&vec![
+            get_normalized_perimeter_points(&mut vec![
                 Position::new(3, 5),
                 Position::new(3, 2),
                 // NOTE: the next 2 points are a segment of length 1
@@ -358,7 +471,7 @@ mod tests {
                 Position::new(7, -2),
                 Position::new(7, 3),
             ]),
-            vec![
+            &mut vec![
                 Position::new(3, 5),
                 Position::new(3, 1),
                 Position::new(5, 1),
@@ -369,7 +482,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_normalized_perimeter_points(&vec![
+            get_normalized_perimeter_points(&mut vec![
                 Position::new(3, 5),
                 // NOTE: the next 2 points are a segment of length 1,
                 // but they are not "making a dent" in the figure,
@@ -380,7 +493,7 @@ mod tests {
                 Position::new(7, -2),
                 Position::new(7, 3),
             ]),
-            vec![
+            &mut vec![
                 Position::new(3, 5),
                 Position::new(3, 1),
                 Position::new(4, 1),
@@ -388,6 +501,53 @@ mod tests {
                 Position::new(7, -2),
                 Position::new(7, 3),
             ]
+        );
+    }
+
+    #[test]
+    fn test_position_norm() {
+        assert_eq!(Position::new(50, 0).norm(), Position::new(1, 0));
+        assert_eq!(Position::new(-50, 0).norm(), Position::new(-1, 0));
+        assert_eq!(Position::new(0, -50).norm(), Position::new(0, -1));
+        assert_eq!(Position::new(0, 50).norm(), Position::new(0, 1));
+    }
+
+    #[test]
+    fn test_is_point_in_segment() {
+        assert_eq!(
+            is_point_in_segment(
+                (&Position::new(1, 5), &Position::new(10, 5)),
+                &Position::new(1, 5)
+            ),
+            true
+        );
+        assert_eq!(
+            is_point_in_segment(
+                (&Position::new(1, 5), &Position::new(10, 5)),
+                &Position::new(10, 5)
+            ),
+            true
+        );
+        assert_eq!(
+            is_point_in_segment(
+                (&Position::new(1, 5), &Position::new(10, 5)),
+                &Position::new(11, 5)
+            ),
+            false
+        );
+        assert_eq!(
+            is_point_in_segment(
+                (&Position::new(1, 5), &Position::new(10, 5)),
+                &Position::new(7, 5)
+            ),
+            true
+        );
+        assert_eq!(
+            is_point_in_segment(
+                (&Position::new(1, 5), &Position::new(10, 5)),
+                &Position::new(10, 6)
+            ),
+            false
         );
     }
 
